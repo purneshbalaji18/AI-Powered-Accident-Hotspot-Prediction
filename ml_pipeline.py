@@ -1,14 +1,15 @@
 """
 AI-Powered Accident Hotspot Prediction
 Team SENTINELS - STATATHON 2025
-ML Pipeline: DBSCAN Clustering + LightGBM Prediction + SHAP Explainability
+ML Pipeline: DBSCAN Clustering + Gradient Boosting Prediction + SHAP Explainability
 """
 
+import os
+import sys
 import numpy as np
 import pandas as pd
 import json
 import pickle
-import os
 from sklearn.cluster import DBSCAN
 from sklearn.ensemble import GradientBoostingClassifier, RandomForestClassifier
 from sklearn.preprocessing import LabelEncoder, StandardScaler
@@ -17,6 +18,9 @@ from sklearn.metrics import (
     classification_report, accuracy_score,
     confusion_matrix, roc_auc_score
 )
+from logger_config import setup_logger
+
+logger = setup_logger(__name__)
 
 BASE = os.path.dirname(os.path.abspath(__file__))
 OUTPUT_DIR = os.path.join(BASE, "models")
@@ -301,29 +305,62 @@ def generate_recommendations(cluster_df):
 # MAIN
 # ─────────────────────────────────────────────
 if __name__ == "__main__":
-    print("=" * 60)
-    print("  AI Accident Hotspot Prediction — ML Pipeline")
-    print("  Team SENTINELS | STATATHON 2025")
-    print("=" * 60)
+    try:
+        logger.info("=" * 60)
+        logger.info("  AI Accident Hotspot Prediction — ML Pipeline")
+        logger.info("  Team SENTINELS | STATATHON 2025")
+        logger.info("=" * 60)
 
-    df = pd.read_csv(DATA_PATH)
-    print(f"\nLoaded {len(df)} accident records")
+        # Data loading with validation
+        if not os.path.exists(DATA_PATH):
+            raise FileNotFoundError(f"Dataset not found at: {DATA_PATH}")
+        
+        logger.info(f"Loading dataset from: {DATA_PATH}")
+        df = pd.read_csv(DATA_PATH)
+        
+        if df.empty:
+            raise ValueError("Loaded dataset is empty")
+        
+        logger.info(f"[OK] Loaded {len(df)} accident records")
 
-    df_clustered, cluster_results = run_clustering(df)
-    df_feat, feature_cols, encoders = engineer_features(df_clustered)
-    gb_model, rf_model, scaler, feat_imp, metrics = train_models(df_feat, feature_cols)
-    shap_df = compute_shap_approximate(df_feat, gb_model, feature_cols)
-    city_stats = compute_city_stats(df_clustered)
+        # Pipeline execution
+        logger.info("Starting clustering...")
+        df_clustered, cluster_results = run_clustering(df)
+        
+        logger.info("Starting feature engineering...")
+        df_feat, feature_cols, encoders = engineer_features(df_clustered)
+        
+        logger.info("Training models...")
+        gb_model, rf_model, scaler, feat_imp, metrics = train_models(df_feat, feature_cols)
+        
+        logger.info("Computing SHAP values...")
+        shap_df = compute_shap_approximate(df_feat, gb_model, feature_cols)
+        
+        logger.info("Computing city statistics...")
+        city_stats = compute_city_stats(df_clustered)
 
-    cluster_summary = pd.read_csv(f"{OUTPUT_DIR}/hotspot_clusters.csv")
-    rec_df = generate_recommendations(cluster_summary)
+        cluster_summary = pd.read_csv(f"{OUTPUT_DIR}/hotspot_clusters.csv")
+        logger.info("Generating recommendations...")
+        rec_df = generate_recommendations(cluster_summary)
 
-    # Save enriched dataset
-    df_feat.to_csv(f"{OUTPUT_DIR}/accidents_enriched.csv", index=False)
+        # Save enriched dataset
+        enriched_path = f"{OUTPUT_DIR}/accidents_enriched.csv"
+        df_feat.to_csv(enriched_path, index=False)
+        logger.info(f"[OK] Enriched dataset saved to: {enriched_path}")
 
-    print("\n" + "=" * 60)
-    print("  Pipeline Complete! All outputs saved to models/")
-    print("=" * 60)
-    print(f"\n  Model Performance:")
-    print(f"    Gradient Boosting  Accuracy: {metrics['gradient_boosting']['accuracy']:.4f}  AUC: {metrics['gradient_boosting']['auc_roc']:.4f}")
-    print(f"    Random Forest      Accuracy: {metrics['random_forest']['accuracy']:.4f}  AUC: {metrics['random_forest']['auc_roc']:.4f}")
+        logger.info("=" * 60)
+        logger.info("  [SUCCESS] Pipeline Complete! All outputs saved to models/")
+        logger.info("=" * 60)
+        logger.info(f"Model Performance:")
+        logger.info(f"  Gradient Boosting  Accuracy: {metrics['gradient_boosting']['accuracy']:.4f}  AUC: {metrics['gradient_boosting']['auc_roc']:.4f}")
+        logger.info(f"  Random Forest      Accuracy: {metrics['random_forest']['accuracy']:.4f}  AUC: {metrics['random_forest']['auc_roc']:.4f}")
+        
+    except FileNotFoundError as e:
+        logger.error(f"File not found: {e}")
+        sys.exit(1)
+    except ValueError as e:
+        logger.error(f"Data validation error: {e}")
+        sys.exit(1)
+    except Exception as e:
+        logger.error(f"Unexpected error in ML pipeline: {e}", exc_info=True)
+        sys.exit(1)

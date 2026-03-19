@@ -32,7 +32,7 @@ for label, script in steps:
     if proc.returncode != 0:
         print(f"\n[ERROR] {script} failed. Check above for details.")
         sys.exit(1)
-    print(f"  ✓ Completed in {elapsed:.1f}s")
+    print(f"  [OK] Completed in {elapsed:.1f}s")
 
 print("\n" + "="*60)
 print("  ✅ All steps complete!")

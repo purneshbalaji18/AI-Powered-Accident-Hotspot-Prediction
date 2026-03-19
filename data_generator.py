@@ -9,6 +9,9 @@ import numpy as np
 import pandas as pd
 import random
 from datetime import datetime, timedelta
+from logger_config import setup_logger
+
+logger = setup_logger(__name__)
 
 # Seed for reproducibility
 np.random.seed(42)
@@ -187,10 +190,27 @@ def generate_synthetic_dataset(n_records=5000):
 
 
 if __name__ == "__main__":
-    print("Generating synthetic accident dataset...")
-    df = generate_synthetic_dataset(5000)
-    output_path = os.path.join(DATA_DIR, "accidents.csv")
-    df.to_csv(output_path, index=False)
-    print(f"Dataset generated: {len(df)} records")
-    print(df.head())
-    print(df.describe())
+    try:
+        logger.info("Starting synthetic accident dataset generation...")
+        df = generate_synthetic_dataset(5000)
+        
+        if df is None or len(df) == 0:
+            raise ValueError("Dataset generation produced empty or None result")
+        
+        output_path = os.path.join(DATA_DIR, "accidents.csv")
+        df.to_csv(output_path, index=False)
+        
+        logger.info(f"[OK] Dataset generation complete: {len(df)} records")
+        logger.info(f"[OK] Output saved to: {output_path}")
+        logger.info(f"Dataset shape: {df.shape}")
+        logger.debug(f"Columns: {list(df.columns)}")
+        
+    except FileNotFoundError as e:
+        logger.error(f"File not found: {e}")
+        exit(1)
+    except PermissionError as e:
+        logger.error(f"Permission denied: {e}")
+        exit(1)
+    except Exception as e:
+        logger.error(f"Unexpected error during dataset generation: {e}", exc_info=True)
+        exit(1)

@@ -843,7 +843,7 @@ const PAGE_SIZE = 30;
 
 async function loadData() {
   try {
-    const resp = await fetch('dashboard_data.json');
+    const resp = await fetch('static/dashboard_data.json');
     DATA = await resp.json();
     initDashboard();
   } catch(e) {

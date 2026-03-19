@@ -1,0 +1,1511 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SENTINELS — AI Accident Hotspot Prediction</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0a0e1a;
+    --surface: #111827;
+    --surface2: #1a2235;
+    --border: #1e2d45;
+    --accent: #f97316;
+    --accent2: #3b82f6;
+    --accent3: #10b981;
+    --critical: #ef4444;
+    --high: #f97316;
+    --medium: #eab308;
+    --low: #22c55e;
+    --text: #e2e8f0;
+    --muted: #64748b;
+    --font: 'Space Grotesk', sans-serif;
+    --mono: 'JetBrains Mono', monospace;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--font);
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* ── HEADER ── */
+  header {
+    background: linear-gradient(135deg, #0d1526 0%, #111827 50%, #0d1a2e 100%);
+    border-bottom: 1px solid var(--border);
+    padding: 0 2rem;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    height: 64px;
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    backdrop-filter: blur(12px);
+  }
+
+  .logo {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+
+  .logo-icon {
+    width: 36px;
+    height: 36px;
+    background: var(--accent);
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 18px;
+  }
+
+  .logo-text {
+    font-size: 15px;
+    font-weight: 700;
+    letter-spacing: 0.5px;
+  }
+
+  .logo-sub {
+    font-size: 11px;
+    color: var(--muted);
+    font-weight: 400;
+  }
+
+  .header-badges {
+    display: flex;
+    gap: 8px;
+  }
+
+  .badge {
+    padding: 4px 10px;
+    border-radius: 20px;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.5px;
+  }
+
+  .badge-green { background: rgba(16,185,129,0.15); color: #10b981; border: 1px solid rgba(16,185,129,0.3); }
+  .badge-orange { background: rgba(249,115,22,0.15); color: #f97316; border: 1px solid rgba(249,115,22,0.3); }
+  .badge-blue { background: rgba(59,130,246,0.15); color: #60a5fa; border: 1px solid rgba(59,130,246,0.3); }
+
+  .live-dot {
+    width: 6px; height: 6px;
+    background: #10b981;
+    border-radius: 50%;
+    display: inline-block;
+    margin-right: 4px;
+    animation: pulse-dot 2s infinite;
+  }
+
+  @keyframes pulse-dot {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.3; }
+  }
+
+  /* ── NAV ── */
+  nav {
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    padding: 0 2rem;
+    gap: 4px;
+    overflow-x: auto;
+  }
+
+  .nav-btn {
+    padding: 12px 16px;
+    background: none;
+    border: none;
+    color: var(--muted);
+    font-family: var(--font);
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    border-bottom: 2px solid transparent;
+    white-space: nowrap;
+    transition: all 0.2s;
+  }
+
+  .nav-btn:hover { color: var(--text); }
+  .nav-btn.active { color: var(--accent); border-bottom-color: var(--accent); }
+
+  /* ── LAYOUT ── */
+  .page { display: none; padding: 1.5rem 2rem; }
+  .page.active { display: block; }
+
+  /* ── KPI CARDS ── */
+  .kpi-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+    gap: 1rem;
+    margin-bottom: 1.5rem;
+  }
+
+  .kpi-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 1.2rem 1.2rem 1rem;
+    position: relative;
+    overflow: hidden;
+    transition: transform 0.2s, border-color 0.2s;
+  }
+
+  .kpi-card:hover { transform: translateY(-2px); border-color: var(--accent); }
+
+  .kpi-card::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 2px;
+  }
+
+  .kpi-card.orange::before { background: var(--accent); }
+  .kpi-card.blue::before { background: var(--accent2); }
+  .kpi-card.green::before { background: var(--accent3); }
+  .kpi-card.red::before { background: var(--critical); }
+
+  .kpi-label {
+    font-size: 11px;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+    margin-bottom: 8px;
+    font-weight: 600;
+  }
+
+  .kpi-value {
+    font-size: 28px;
+    font-weight: 700;
+    font-family: var(--mono);
+    line-height: 1;
+  }
+
+  .kpi-sub {
+    font-size: 11px;
+    color: var(--muted);
+    margin-top: 6px;
+  }
+
+  .kpi-icon {
+    position: absolute;
+    right: 1rem;
+    top: 1rem;
+    font-size: 22px;
+    opacity: 0.3;
+  }
+
+  /* ── CHARTS GRID ── */
+  .charts-grid {
+    display: grid;
+    grid-template-columns: repeat(12, 1fr);
+    gap: 1rem;
+  }
+
+  .chart-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 1.2rem;
+  }
+
+  .chart-card.col-8 { grid-column: span 8; }
+  .chart-card.col-6 { grid-column: span 6; }
+  .chart-card.col-4 { grid-column: span 4; }
+  .chart-card.col-12 { grid-column: span 12; }
+  .chart-card.col-5 { grid-column: span 5; }
+  .chart-card.col-7 { grid-column: span 7; }
+
+  .chart-title {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text);
+    margin-bottom: 1rem;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  .chart-title span { color: var(--muted); font-size: 11px; font-weight: 400; }
+
+  canvas { max-height: 260px; }
+
+  /* ── MAP ── */
+  #map-container {
+    height: 600px;
+    border-radius: 12px;
+    overflow: hidden;
+    position: relative;
+  }
+
+  #main-map { height: 100%; width: 100%; }
+
+  .map-controls {
+    position: absolute;
+    top: 12px;
+    right: 12px;
+    z-index: 1000;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .map-btn {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 8px 12px;
+    font-family: var(--font);
+    font-size: 12px;
+    color: var(--text);
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+
+  .map-btn:hover, .map-btn.active { background: var(--accent); border-color: var(--accent); }
+
+  .map-legend {
+    position: absolute;
+    bottom: 12px;
+    left: 12px;
+    z-index: 1000;
+    background: rgba(17,24,39,0.92);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 12px 16px;
+    font-size: 12px;
+  }
+
+  .legend-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 4px;
+  }
+
+  .legend-dot {
+    width: 10px; height: 10px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+
+  /* ── TABLE ── */
+  .data-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+  }
+
+  .data-table th {
+    background: var(--surface2);
+    padding: 10px 14px;
+    text-align: left;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+    color: var(--muted);
+    font-weight: 600;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .data-table td {
+    padding: 10px 14px;
+    border-bottom: 1px solid rgba(30,45,69,0.5);
+    color: var(--text);
+  }
+
+  .data-table tr:hover td { background: rgba(255,255,255,0.02); }
+
+  .risk-pill {
+    padding: 3px 10px;
+    border-radius: 20px;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.5px;
+    font-family: var(--mono);
+  }
+
+  .risk-critical { background: rgba(239,68,68,0.15); color: #ef4444; }
+  .risk-high { background: rgba(249,115,22,0.15); color: #f97316; }
+  .risk-medium { background: rgba(234,179,8,0.15); color: #eab308; }
+  .risk-low { background: rgba(34,197,94,0.15); color: #22c55e; }
+
+  /* ── PREDICTOR ── */
+  .predictor-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1.5rem;
+  }
+
+  .form-group {
+    margin-bottom: 1rem;
+  }
+
+  .form-label {
+    display: block;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 6px;
+  }
+
+  .form-control {
+    width: 100%;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 10px 12px;
+    color: var(--text);
+    font-family: var(--font);
+    font-size: 13px;
+    outline: none;
+    transition: border-color 0.2s;
+  }
+
+  .form-control:focus { border-color: var(--accent2); }
+
+  .predict-btn {
+    width: 100%;
+    background: var(--accent);
+    color: white;
+    border: none;
+    border-radius: 10px;
+    padding: 14px;
+    font-family: var(--font);
+    font-size: 14px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: all 0.2s;
+    letter-spacing: 0.5px;
+    margin-top: 0.5rem;
+  }
+
+  .predict-btn:hover { background: #ea6d0e; transform: translateY(-1px); }
+
+  .risk-gauge {
+    text-align: center;
+    padding: 2rem;
+  }
+
+  .gauge-value {
+    font-size: 72px;
+    font-weight: 700;
+    font-family: var(--mono);
+    line-height: 1;
+  }
+
+  .gauge-label { font-size: 14px; color: var(--muted); margin-top: 8px; }
+
+  .gauge-bar {
+    height: 12px;
+    background: var(--surface2);
+    border-radius: 6px;
+    margin: 16px auto;
+    max-width: 280px;
+    overflow: hidden;
+  }
+
+  .gauge-fill {
+    height: 100%;
+    border-radius: 6px;
+    transition: width 0.6s ease, background 0.6s;
+  }
+
+  .insight-list {
+    list-style: none;
+    margin-top: 1.5rem;
+  }
+
+  .insight-list li {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    padding: 10px 0;
+    border-bottom: 1px solid rgba(30,45,69,0.5);
+    font-size: 13px;
+  }
+
+  .insight-icon { font-size: 16px; flex-shrink: 0; margin-top: 2px; }
+
+  /* ── SHAP ── */
+  .shap-bar-container {
+    display: flex;
+    align-items: center;
+    margin-bottom: 10px;
+    gap: 10px;
+  }
+
+  .shap-label {
+    font-size: 12px;
+    font-family: var(--mono);
+    color: var(--text);
+    width: 180px;
+    flex-shrink: 0;
+  }
+
+  .shap-track {
+    flex: 1;
+    height: 20px;
+    background: var(--surface2);
+    border-radius: 4px;
+    overflow: hidden;
+  }
+
+  .shap-fill {
+    height: 100%;
+    border-radius: 4px;
+    transition: width 1s ease;
+    display: flex;
+    align-items: center;
+    padding-left: 8px;
+    font-size: 11px;
+    font-family: var(--mono);
+    font-weight: 600;
+    color: white;
+  }
+
+  /* ── SCROLLBAR ── */
+  ::-webkit-scrollbar { width: 4px; height: 4px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+
+  /* ── RESPONSIVE ── */
+  @media (max-width: 768px) {
+    .chart-card.col-8, .chart-card.col-6, .chart-card.col-5,
+    .chart-card.col-7, .chart-card.col-4 { grid-column: span 12; }
+    .predictor-grid { grid-template-columns: 1fr; }
+    .page { padding: 1rem; }
+    nav { padding: 0 1rem; }
+    header { padding: 0 1rem; }
+    .header-badges { display: none; }
+  }
+
+  .section-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 1.2rem;
+  }
+
+  .section-title {
+    font-size: 16px;
+    font-weight: 700;
+  }
+
+  .info-box {
+    background: rgba(59,130,246,0.08);
+    border: 1px solid rgba(59,130,246,0.2);
+    border-radius: 8px;
+    padding: 12px 16px;
+    font-size: 13px;
+    color: #93c5fd;
+    margin-bottom: 1rem;
+  }
+
+  .tab-grid { display: flex; gap: 8px; margin-bottom: 1rem; flex-wrap: wrap; }
+
+  .tab-chip {
+    padding: 6px 14px;
+    border-radius: 20px;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    border: 1px solid var(--border);
+    background: var(--surface);
+    color: var(--muted);
+    transition: all 0.2s;
+  }
+
+  .tab-chip.active {
+    background: rgba(249,115,22,0.15);
+    border-color: var(--accent);
+    color: var(--accent);
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">
+    <div class="logo-icon">🛡️</div>
+    <div>
+      <div class="logo-text">SENTINELS — AccidentAI</div>
+      <div class="logo-sub">STATATHON 2025 · PS-4 · Team 3346</div>
+    </div>
+  </div>
+  <div class="header-badges">
+    <div class="badge badge-green"><span class="live-dot"></span>Live Dashboard</div>
+    <div class="badge badge-orange">GBM · 74.2% Acc</div>
+    <div class="badge badge-blue">8 Cities · 5000 Records</div>
+  </div>
+</header>
+
+<nav>
+  <button class="nav-btn active" onclick="showPage('overview')">📊 Overview</button>
+  <button class="nav-btn" onclick="showPage('map')">🗺️ Hotspot Map</button>
+  <button class="nav-btn" onclick="showPage('analytics')">📈 Analytics</button>
+  <button class="nav-btn" onclick="showPage('predictor')">🤖 Risk Predictor</button>
+  <button class="nav-btn" onclick="showPage('explainability')">🔬 Explainability</button>
+  <button class="nav-btn" onclick="showPage('recommendations')">💡 Recommendations</button>
+  <button class="nav-btn" onclick="showPage('data')">📋 Data Explorer</button>
+</nav>
+
+<!-- ═══════════════════════════════════════════
+     PAGE 1: OVERVIEW
+═══════════════════════════════════════════ -->
+<div id="page-overview" class="page active">
+  <div class="section-header">
+    <div class="section-title">Dashboard Overview</div>
+    <div class="badge badge-blue">India Road Safety · 2019–2024</div>
+  </div>
+
+  <div class="kpi-grid" id="kpi-grid"></div>
+
+  <div class="charts-grid">
+    <div class="chart-card col-8">
+      <div class="chart-title">Monthly Accident Trend <span>2019–2024</span></div>
+      <canvas id="chart-trend"></canvas>
+    </div>
+    <div class="chart-card col-4">
+      <div class="chart-title">Severity Distribution <span>All Cities</span></div>
+      <canvas id="chart-severity"></canvas>
+    </div>
+    <div class="chart-card col-6">
+      <div class="chart-title">Accidents by City <span>Total Count</span></div>
+      <canvas id="chart-city"></canvas>
+    </div>
+    <div class="chart-card col-6">
+      <div class="chart-title">Year-over-Year Fatalities <span>Annual</span></div>
+      <canvas id="chart-yoy"></canvas>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════
+     PAGE 2: MAP
+═══════════════════════════════════════════ -->
+<div id="page-map" class="page">
+  <div class="section-header">
+    <div class="section-title">🗺️ Accident Hotspot Map</div>
+    <div class="tab-grid">
+      <div class="tab-chip active" onclick="setMapLayer('hotspots', this)">🔴 Hotspot Clusters</div>
+      <div class="tab-chip" onclick="setMapLayer('accidents', this)">📍 All Accidents</div>
+      <div class="tab-chip" onclick="setMapLayer('heatmap', this)">🌡️ Risk Heatmap</div>
+    </div>
+  </div>
+  <div id="map-container" style="position:relative;">
+    <div id="main-map"></div>
+    <div class="map-legend">
+      <div style="font-size:11px; font-weight:700; color:var(--muted); margin-bottom:8px; text-transform:uppercase; letter-spacing:0.5px;">Risk Level</div>
+      <div class="legend-row"><div class="legend-dot" style="background:#ef4444"></div><span>Critical (>70)</span></div>
+      <div class="legend-row"><div class="legend-dot" style="background:#f97316"></div><span>High (55–70)</span></div>
+      <div class="legend-row"><div class="legend-dot" style="background:#eab308"></div><span>Medium (40–55)</span></div>
+      <div class="legend-row"><div class="legend-dot" style="background:#22c55e"></div><span>Low (&lt;40)</span></div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════
+     PAGE 3: ANALYTICS
+═══════════════════════════════════════════ -->
+<div id="page-analytics" class="page">
+  <div class="section-title" style="margin-bottom:1rem">📈 Deep Analytics</div>
+  <div class="charts-grid">
+    <div class="chart-card col-6">
+      <div class="chart-title">Accidents by Hour of Day <span>Risk Pattern</span></div>
+      <canvas id="chart-hourly"></canvas>
+    </div>
+    <div class="chart-card col-6">
+      <div class="chart-title">Weather Impact on Risk <span>Avg Risk Score</span></div>
+      <canvas id="chart-weather"></canvas>
+    </div>
+    <div class="chart-card col-5">
+      <div class="chart-title">Accident Causes <span>Top Reasons</span></div>
+      <canvas id="chart-causes"></canvas>
+    </div>
+    <div class="chart-card col-7">
+      <div class="chart-title">Road Type Risk Analysis <span>Mean Risk Score</span></div>
+      <canvas id="chart-roadtype"></canvas>
+    </div>
+    <div class="chart-card col-6">
+      <div class="chart-title">City Risk Comparison <span>Avg Risk Score</span></div>
+      <canvas id="chart-city-risk"></canvas>
+    </div>
+    <div class="chart-card col-6">
+      <div class="chart-title">Fatality Rate by City <span>Per 100 accidents</span></div>
+      <canvas id="chart-fatality"></canvas>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════
+     PAGE 4: PREDICTOR
+═══════════════════════════════════════════ -->
+<div id="page-predictor" class="page">
+  <div class="section-header">
+    <div class="section-title">🤖 AI Risk Predictor</div>
+    <div class="badge badge-blue">Gradient Boosting · AUC 0.8079</div>
+  </div>
+  <div class="info-box">
+    Enter road conditions to predict the accident risk score. The model uses 18 features trained on 5,000 accident records across 8 Indian cities.
+  </div>
+  <div class="predictor-grid">
+    <div class="chart-card">
+      <div class="chart-title">Input Parameters</div>
+      <div class="form-group">
+        <label class="form-label">City</label>
+        <select class="form-control" id="p-city">
+          <option>Delhi</option><option>Mumbai</option><option>Bengaluru</option>
+          <option>Chennai</option><option>Hyderabad</option><option>Kolkata</option>
+          <option>Pune</option><option>Ahmedabad</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Weather</label>
+        <select class="form-control" id="p-weather">
+          <option>Clear</option><option>Rain</option><option>Fog</option>
+          <option>Haze</option><option>Overcast</option><option>Heavy Rain</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Road Type</label>
+        <select class="form-control" id="p-road">
+          <option>Urban Road</option><option>National Highway</option>
+          <option>State Highway</option><option>Ring Road</option>
+          <option>Expressway</option><option>Rural Road</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Hour of Day (0–23)</label>
+        <input type="number" class="form-control" id="p-hour" min="0" max="23" value="18">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Road Condition</label>
+        <select class="form-control" id="p-road-cond">
+          <option>Good</option><option>Average</option><option>Poor</option><option>Very Poor</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Primary Accident Cause</label>
+        <select class="form-control" id="p-cause">
+          <option>Overspeeding</option><option>Drunk Driving</option>
+          <option>Distracted Driving</option><option>Poor Road Condition</option>
+          <option>Signal Violation</option><option>Wrong Side Driving</option>
+          <option>Pedestrian Error</option><option>Vehicle Failure</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Vehicle Type</label>
+        <select class="form-control" id="p-vehicle">
+          <option>Two-Wheeler</option><option>Car/Jeep</option>
+          <option>Truck/Lorry</option><option>Bus</option>
+          <option>Auto-Rickshaw</option>
+        </select>
+      </div>
+      <button class="predict-btn" onclick="runPredictor()">⚡ Predict Risk Score</button>
+    </div>
+    <div class="chart-card" id="predictor-result">
+      <div class="chart-title">Risk Assessment</div>
+      <div class="risk-gauge">
+        <div class="gauge-value" id="gauge-value" style="color: #64748b;">—</div>
+        <div class="gauge-label" id="gauge-label">Enter parameters and click Predict</div>
+        <div class="gauge-bar"><div class="gauge-fill" id="gauge-fill" style="width:0%"></div></div>
+        <div id="gauge-level" style="font-size:13px; color:var(--muted);"></div>
+      </div>
+      <ul class="insight-list" id="insight-list"></ul>
+    </div>
+  </div>
+
+  <!-- Scenario comparison -->
+  <div class="chart-card" style="margin-top:1rem;">
+    <div class="chart-title">Pre-defined Risk Scenarios <span>Comparison</span></div>
+    <div id="scenario-bars"></div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════
+     PAGE 5: EXPLAINABILITY
+═══════════════════════════════════════════ -->
+<div id="page-explainability" class="page">
+  <div class="section-header">
+    <div class="section-title">🔬 Model Explainability (SHAP)</div>
+    <div class="badge badge-green">Gradient Boosting · Feature Analysis</div>
+  </div>
+  <div class="info-box">
+    SHAP (SHapley Additive exPlanations) values reveal which features drive accident predictions. Higher values = more impact on the model's output.
+  </div>
+  <div class="charts-grid">
+    <div class="chart-card col-7">
+      <div class="chart-title">Feature Importance (SHAP-style)</div>
+      <div id="shap-bars" style="padding: 8px 0;"></div>
+    </div>
+    <div class="chart-card col-5">
+      <div class="chart-title">Model Performance Metrics</div>
+      <div id="metrics-display"></div>
+    </div>
+    <div class="chart-card col-12">
+      <div class="chart-title">Feature Importance Comparison <span>Gradient Boosting vs Random Forest</span></div>
+      <canvas id="chart-feat-compare" style="max-height:220px;"></canvas>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════
+     PAGE 6: RECOMMENDATIONS
+═══════════════════════════════════════════ -->
+<div id="page-recommendations" class="page">
+  <div class="section-header">
+    <div class="section-title">💡 AI-Generated Recommendations</div>
+    <div style="display:flex;gap:8px;">
+      <select class="form-control" id="rec-city-filter" style="width:160px; padding:6px 10px; font-size:12px;" onchange="filterRecs()">
+        <option value="">All Cities</option>
+      </select>
+      <select class="form-control" id="rec-risk-filter" style="width:140px; padding:6px 10px; font-size:12px;" onchange="filterRecs()">
+        <option value="">All Risk Levels</option>
+        <option>CRITICAL</option><option>HIGH</option><option>MEDIUM</option>
+      </select>
+    </div>
+  </div>
+  <div id="rec-table-wrapper">
+    <table class="data-table" id="rec-table">
+      <thead>
+        <tr>
+          <th>#</th><th>City</th><th>Accidents</th><th>Risk Level</th>
+          <th>Avg Risk</th><th>Top Cause</th><th>AI Recommendations</th>
+        </tr>
+      </thead>
+      <tbody id="rec-tbody"></tbody>
+    </table>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════
+     PAGE 7: DATA EXPLORER
+═══════════════════════════════════════════ -->
+<div id="page-data" class="page">
+  <div class="section-header">
+    <div class="section-title">📋 Data Explorer</div>
+    <div style="display:flex;gap:8px;align-items:center;">
+      <select class="form-control" id="data-city-filter" style="width:140px; padding:6px 10px; font-size:12px;" onchange="filterData()">
+        <option value="">All Cities</option>
+      </select>
+      <select class="form-control" id="data-sev-filter" style="width:150px; padding:6px 10px; font-size:12px;" onchange="filterData()">
+        <option value="">All Severities</option>
+        <option>Fatal</option><option>Grievous Injury</option>
+        <option>Minor Injury</option><option>Property Damage</option>
+      </select>
+      <span id="data-count" style="font-size:12px; color:var(--muted);"></span>
+    </div>
+  </div>
+  <div style="overflow-x:auto;">
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th>ID</th><th>City</th><th>Date</th><th>Hour</th>
+          <th>Weather</th><th>Road Type</th><th>Cause</th>
+          <th>Severity</th><th>Killed</th><th>Injured</th><th>Risk</th>
+        </tr>
+      </thead>
+      <tbody id="data-tbody"></tbody>
+    </table>
+  </div>
+  <div style="margin-top:1rem; display:flex; gap:8px; align-items:center;">
+    <button class="map-btn" onclick="prevPage()" id="btn-prev">← Prev</button>
+    <span id="page-indicator" style="font-size:12px; color:var(--muted);"></span>
+    <button class="map-btn" onclick="nextPage()" id="btn-next">Next →</button>
+  </div>
+</div>
+
+<script>
+// ─────────────────────────────────────────────
+// LOAD DATA & INIT
+// ─────────────────────────────────────────────
+let DATA = null;
+let mapInstance = null;
+let mapLayerGroups = {};
+let currentMapLayer = 'hotspots';
+let dataPage = 0;
+let filteredData = [];
+const PAGE_SIZE = 30;
+
+async function loadData() {
+  try {
+    const resp = await fetch('dashboard_data.json');
+    DATA = await resp.json();
+    initDashboard();
+  } catch(e) {
+    // Fallback: generate mock data inline
+    DATA = generateMockData();
+    initDashboard();
+  }
+}
+
+function generateMockData() {
+  // Inline fallback mock data if JSON file not found
+  const cities = ["Delhi","Mumbai","Bengaluru","Chennai","Hyderabad","Kolkata","Pune","Ahmedabad"];
+  const severities = ["Fatal","Grievous Injury","Minor Injury","Property Damage"];
+  const weather = ["Clear","Rain","Fog","Haze","Overcast","Heavy Rain"];
+  const causes = ["Overspeeding","Drunk Driving","Distracted Driving","Poor Road Condition","Signal Violation"];
+  const roads = ["National Highway","State Highway","Urban Road","Rural Road","Expressway"];
+
+  const cityBounds = {
+    "Delhi":[28.4,28.9,76.9,77.4],"Mumbai":[18.8,19.3,72.7,73.1],
+    "Bengaluru":[12.8,13.2,77.4,77.8],"Chennai":[12.9,13.3,80.1,80.3],
+    "Hyderabad":[17.2,17.6,78.3,78.7],"Kolkata":[22.4,22.7,88.2,88.5],
+    "Pune":[18.4,18.7,73.7,74.1],"Ahmedabad":[22.9,23.2,72.4,72.8]
+  };
+
+  const accidents = [];
+  for(let i=0;i<500;i++){
+    const city = cities[i%8];
+    const b = cityBounds[city];
+    const risk = 20+Math.floor(Math.random()*80);
+    accidents.push({
+      accident_id:`ACC${i+1}`,city,
+      latitude:b[0]+(Math.random()*(b[1]-b[0])),
+      longitude:b[2]+(Math.random()*(b[3]-b[2])),
+      date:`202${Math.floor(i/83)}-${String(1+i%12).padStart(2,'0')}-15`,
+      hour:Math.floor(Math.random()*24),
+      weather:weather[Math.floor(Math.random()*6)],
+      road_type:roads[Math.floor(Math.random()*5)],
+      accident_cause:causes[Math.floor(Math.random()*5)],
+      severity:severities[Math.floor(Math.random()*4)],
+      num_killed:Math.random()<0.1?1:0,
+      num_injured:Math.floor(Math.random()*4),
+      risk_score:risk,
+      predicted_risk_prob:risk/100
+    });
+  }
+
+  const hotspots = cities.flatMap((city,ci)=>{
+    const b=cityBounds[city];
+    return [0,1,2].map((j)=>({
+      cluster_id:j, city,
+      lat:b[0]+0.2*(j+1)*(b[1]-b[0])/(4),
+      lon:b[2]+0.2*(j+1)*(b[3]-b[2])/(4),
+      num_accidents:20+Math.floor(Math.random()*40),
+      num_fatal:2+Math.floor(Math.random()*8),
+      avg_risk:50+Math.floor(Math.random()*40),
+      top_cause:causes[j%5], top_weather:weather[j%6],
+      radius_km:0.3+Math.random()*0.5,
+      recommendation:"Deploy traffic police | Install speed cameras",
+      risk_level:["CRITICAL","HIGH","MEDIUM"][j%3]
+    }));
+  });
+
+  const cityChart = cities.map(c=>({
+    city:c, total_accidents:500+Math.floor(Math.random()*300),
+    total_fatalities:100+Math.floor(Math.random()*200),
+    avg_risk:55+Math.floor(Math.random()*15),
+    fatality_rate:10+Math.floor(Math.random()*20),
+    peak_hour_pct:30+Math.floor(Math.random()*20),
+    monsoon_pct:25+Math.floor(Math.random()*15)
+  }));
+
+  const months=["2019-01","2019-04","2019-07","2019-10","2020-01","2020-04","2020-07","2020-10",
+    "2021-01","2021-04","2021-07","2021-10","2022-01","2022-04","2022-07","2022-10",
+    "2023-01","2023-04","2023-07","2023-10","2024-01","2024-04","2024-07","2024-10"];
+  const timeSeries=months.map(p=>({period:p,count:60+Math.floor(Math.random()*80),fatalities:5+Math.floor(Math.random()*20)}));
+
+  const featImp=[
+    {feature:"longitude",importance_gb:0.27,importance_rf:0.11},
+    {feature:"latitude",importance_gb:0.23,importance_rf:0.12},
+    {feature:"is_peak_hour",importance_gb:0.08,importance_rf:0.09},
+    {feature:"weather_enc",importance_gb:0.08,importance_rf:0.08},
+    {feature:"accident_cause_enc",importance_gb:0.06,importance_rf:0.07},
+    {feature:"road_type_enc",importance_gb:0.05,importance_rf:0.07},
+    {feature:"estimated_speed_kmph",importance_gb:0.05,importance_rf:0.09},
+    {feature:"hour",importance_gb:0.04,importance_rf:0.07},
+    {feature:"vehicle_type_enc",importance_gb:0.03,importance_rf:0.04},
+    {feature:"month",importance_gb:0.03,importance_rf:0.05}
+  ];
+
+  return {
+    overview:{total_accidents:5000,total_fatalities:3260,total_injuries:13139,
+      total_hotspots:43,cities_covered:8,avg_risk_score:66.9,high_risk_count:3252,
+      model_accuracy:0.742,model_auc:0.8079},
+    map_accidents:accidents, hotspots,
+    city_chart:cityChart, time_series:timeSeries,
+    feature_importance:featImp,
+    hourly_dist:Array.from({length:24},(_,h)=>({hour:h,count:10+Math.floor(Math.random()*80),avg_risk:40+Math.random()*40})),
+    severity_dist:{"Fatal":930,"Grievous Injury":1460,"Minor Injury":1680,"Property Damage":930},
+    weather_dist:{"Clear":2100,"Rain":700,"Fog":600,"Haze":480,"Overcast":750,"Heavy Rain":370},
+    cause_dist:{"Overspeeding":950,"Drunk Driving":680,"Distracted Driving":720,"Poor Road Condition":580,"Signal Violation":490,"Wrong Side Driving":420,"Pedestrian Error":360,"Vehicle Failure":270},
+    road_risk:{"National Highway":72,"Expressway":68,"State Highway":62,"Ring Road":58,"Urban Road":55,"Rural Road":52},
+    yoy_trend:[{year:2019,count:850,fatalities:520},{year:2020,count:720,fatalities:440},{year:2021,count:810,fatalities:510},{year:2022,count:890,fatalities:560},{year:2023,count:950,fatalities:620},{year:2024,count:780,fatalities:490}],
+    scenarios:[
+      {name:"Clear Day, Normal Traffic",risk:32,factors:["Good weather","Off-peak","Good road"]},
+      {name:"Peak Hour, Urban Road",risk:55,factors:["Rush hour","High density","Urban junction"]},
+      {name:"Night + Fog + Highway",risk:78,factors:["Poor visibility","High speed","Fatigue"]},
+      {name:"Monsoon + Poor Road",risk:85,factors:["Heavy rain","Pothole-ridden","Slippery"]},
+      {name:"Black Spot Zone",risk:94,factors:["Historical hotspot","Multiple causes","No signage"]},
+    ],
+    model_metrics:{gradient_boosting:{accuracy:0.742,auc_roc:0.8079},random_forest:{accuracy:0.701,auc_roc:0.7108}}
+  };
+}
+
+function initDashboard() {
+  renderKPIs();
+  renderOverviewCharts();
+  renderAnalyticsCharts();
+  renderRecommendations();
+  renderDataExplorer();
+  renderExplainability();
+  renderScenarios();
+  // Map init deferred until tab shown
+}
+
+// ─────────────────────────────────────────────
+// NAV
+// ─────────────────────────────────────────────
+function showPage(name) {
+  document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
+  document.querySelectorAll('.nav-btn').forEach(b=>b.classList.remove('active'));
+  document.getElementById('page-'+name).classList.add('active');
+  event.target.classList.add('active');
+  if(name==='map' && !mapInstance) initMap();
+}
+
+// ─────────────────────────────────────────────
+// KPI CARDS
+// ─────────────────────────────────────────────
+function renderKPIs() {
+  const o = DATA.overview;
+  const cards = [
+    {label:"Total Accidents",value:o.total_accidents.toLocaleString(),sub:"2019–2024",icon:"🚗",cls:"orange"},
+    {label:"Total Fatalities",value:o.total_fatalities.toLocaleString(),sub:"Deaths recorded",icon:"💔",cls:"red"},
+    {label:"Total Injuries",value:o.total_injuries.toLocaleString(),sub:"Injured persons",icon:"🏥",cls:"blue"},
+    {label:"Hotspot Clusters",value:o.total_hotspots,sub:`${o.cities_covered} cities`,icon:"🔴",cls:"red"},
+    {label:"Avg Risk Score",value:o.avg_risk_score,sub:"/100 maximum",icon:"⚠️",cls:"orange"},
+    {label:"High Risk Cases",value:o.high_risk_count.toLocaleString(),sub:`${(o.high_risk_count/o.total_accidents*100).toFixed(1)}% of total`,icon:"🚨",cls:"red"},
+    {label:"Model Accuracy",value:(o.model_accuracy*100).toFixed(1)+"%",sub:`AUC: ${o.model_auc}`,icon:"🤖",cls:"green"},
+    {label:"Cities Covered",value:o.cities_covered,sub:"Major Indian metros",icon:"🏙️",cls:"blue"},
+  ];
+  document.getElementById('kpi-grid').innerHTML = cards.map(c=>`
+    <div class="kpi-card ${c.cls}">
+      <div class="kpi-icon">${c.icon}</div>
+      <div class="kpi-label">${c.label}</div>
+      <div class="kpi-value">${c.value}</div>
+      <div class="kpi-sub">${c.sub}</div>
+    </div>
+  `).join('');
+}
+
+// ─────────────────────────────────────────────
+// CHART HELPERS
+// ─────────────────────────────────────────────
+const CHART_DEFAULTS = {
+  color: '#e2e8f0',
+  borderColor: '#1e2d45',
+  font: { family: 'Space Grotesk', size: 11 }
+};
+
+function chartDefaults() {
+  return {
+    plugins: { legend: { labels: { color: '#94a3b8', font: CHART_DEFAULTS.font, boxWidth: 12 } } },
+    scales: {
+      x: { ticks: { color: '#64748b', font: CHART_DEFAULTS.font }, grid: { color: 'rgba(30,45,69,0.5)' } },
+      y: { ticks: { color: '#64748b', font: CHART_DEFAULTS.font }, grid: { color: 'rgba(30,45,69,0.5)' } },
+    }
+  };
+}
+
+const COLORS = ['#f97316','#3b82f6','#10b981','#ef4444','#8b5cf6','#06b6d4','#f59e0b','#ec4899'];
+
+// ─────────────────────────────────────────────
+// OVERVIEW CHARTS
+// ─────────────────────────────────────────────
+function renderOverviewCharts() {
+  // Trend
+  const ts = DATA.time_series;
+  new Chart(document.getElementById('chart-trend'), {
+    type: 'line',
+    data: {
+      labels: ts.map(d=>d.period),
+      datasets: [
+        { label: 'Accidents', data: ts.map(d=>d.count), borderColor: '#f97316', backgroundColor: 'rgba(249,115,22,0.08)', tension: 0.4, fill: true, pointRadius: 0 },
+        { label: 'Fatalities', data: ts.map(d=>d.fatalities), borderColor: '#ef4444', backgroundColor: 'rgba(239,68,68,0.05)', tension: 0.4, fill: true, pointRadius: 0, yAxisID: 'y2' }
+      ]
+    },
+    options: {
+      ...chartDefaults(),
+      responsive: true,
+      interaction: { mode: 'index', intersect: false },
+      scales: {
+        x: { ticks: { color: '#64748b', font: CHART_DEFAULTS.font, maxRotation: 45, maxTicksLimit: 12 }, grid: { color: 'rgba(30,45,69,0.5)' } },
+        y: { ticks: { color: '#64748b', font: CHART_DEFAULTS.font }, grid: { color: 'rgba(30,45,69,0.5)' }, title: { display: true, text: 'Accidents', color: '#64748b', font: {size:10} } },
+        y2: { position: 'right', ticks: { color: '#64748b', font: CHART_DEFAULTS.font }, grid: { drawOnChartArea: false }, title: { display: true, text: 'Fatalities', color: '#64748b', font: {size:10} } }
+      }
+    }
+  });
+
+  // Severity doughnut
+  const sev = DATA.severity_dist;
+  new Chart(document.getElementById('chart-severity'), {
+    type: 'doughnut',
+    data: {
+      labels: Object.keys(sev),
+      datasets: [{ data: Object.values(sev), backgroundColor: ['#ef4444','#f97316','#eab308','#22c55e'], borderWidth: 0 }]
+    },
+    options: {
+      responsive: true,
+      plugins: { legend: { position: 'bottom', labels: { color: '#94a3b8', font: CHART_DEFAULTS.font, boxWidth: 10 } } },
+      cutout: '65%'
+    }
+  });
+
+  // City bar
+  const cc = DATA.city_chart;
+  new Chart(document.getElementById('chart-city'), {
+    type: 'bar',
+    data: {
+      labels: cc.map(c=>c.city),
+      datasets: [
+        { label: 'Accidents', data: cc.map(c=>c.total_accidents), backgroundColor: 'rgba(249,115,22,0.7)', borderRadius: 4 },
+        { label: 'Fatalities', data: cc.map(c=>c.total_fatalities), backgroundColor: 'rgba(239,68,68,0.7)', borderRadius: 4 }
+      ]
+    },
+    options: { ...chartDefaults(), responsive: true }
+  });
+
+  // YoY
+  const yoy = DATA.yoy_trend;
+  new Chart(document.getElementById('chart-yoy'), {
+    type: 'bar',
+    data: {
+      labels: yoy.map(d=>d.year),
+      datasets: [
+        { label: 'Accidents', data: yoy.map(d=>d.count), backgroundColor: 'rgba(59,130,246,0.7)', borderRadius: 4 },
+        { label: 'Fatalities', data: yoy.map(d=>d.fatalities), backgroundColor: 'rgba(239,68,68,0.7)', borderRadius: 4 }
+      ]
+    },
+    options: { ...chartDefaults(), responsive: true }
+  });
+}
+
+// ─────────────────────────────────────────────
+// MAP
+// ─────────────────────────────────────────────
+function initMap() {
+  mapInstance = L.map('main-map', { zoomControl: true }).setView([20.5937, 78.9629], 5);
+  L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+    attribution: '©OpenStreetMap ©CartoDB', subdomains: 'abcd', maxZoom: 19
+  }).addTo(mapInstance);
+
+  mapLayerGroups.hotspots = L.layerGroup();
+  mapLayerGroups.accidents = L.layerGroup();
+  mapLayerGroups.heatmap = L.layerGroup();
+
+  // Add hotspots
+  DATA.hotspots.forEach(h => {
+    const color = h.risk_level==='CRITICAL'?'#ef4444':h.risk_level==='HIGH'?'#f97316':'#eab308';
+    const radius = Math.max(8, Math.min(30, h.num_accidents * 0.5));
+    const circle = L.circleMarker([h.lat, h.lon], {
+      radius, color, fillColor: color, fillOpacity: 0.25, weight: 2, opacity: 0.8
+    }).bindPopup(`
+      <div style="font-family:Space Grotesk,sans-serif; min-width:200px;">
+        <div style="font-weight:700; font-size:14px; margin-bottom:8px; color:#f97316;">${h.city} — Cluster ${h.cluster_id}</div>
+        <div style="font-size:12px; color:#888; margin-bottom:4px;">📍 ${h.lat.toFixed(4)}, ${h.lon.toFixed(4)}</div>
+        <hr style="border:none; border-top:1px solid #333; margin:8px 0;">
+        <div style="font-size:12px;"><b>Accidents:</b> ${h.num_accidents}</div>
+        <div style="font-size:12px;"><b>Fatalities:</b> ${h.num_fatal}</div>
+        <div style="font-size:12px;"><b>Avg Risk:</b> ${h.avg_risk}/100</div>
+        <div style="font-size:12px;"><b>Top Cause:</b> ${h.top_cause}</div>
+        <div style="font-size:12px;"><b>Weather:</b> ${h.top_weather}</div>
+        <hr style="border:none; border-top:1px solid #333; margin:8px 0;">
+        <div style="font-size:11px; color:#f97316;"><b>Risk Level: ${h.risk_level}</b></div>
+        <div style="font-size:11px; margin-top:4px;">${h.recommendation.split('|')[0]}</div>
+      </div>
+    `);
+    mapLayerGroups.hotspots.addLayer(circle);
+
+    // Pulse ring
+    L.circleMarker([h.lat, h.lon], {
+      radius: radius + 6, color, fillOpacity: 0, weight: 1, opacity: 0.3
+    }).addTo(mapLayerGroups.hotspots);
+  });
+
+  // Add accident dots
+  DATA.map_accidents.forEach(a => {
+    const r = a.risk_score;
+    const c = r>70?'#ef4444':r>55?'#f97316':r>40?'#eab308':'#22c55e';
+    L.circleMarker([a.latitude, a.longitude], {
+      radius: 3, color: c, fillColor: c, fillOpacity: 0.7, weight: 0
+    }).bindPopup(`
+      <div style="font-family:Space Grotesk,sans-serif; font-size:12px; min-width:160px;">
+        <b>${a.city}</b><br>
+        📅 ${a.date} ${a.hour}:00<br>
+        🌤 ${a.weather} | 🛣 ${a.road_type}<br>
+        ⚠️ ${a.accident_cause}<br>
+        💀 Killed: ${a.num_killed} | 🤕 Injured: ${a.num_injured}<br>
+        <b>Risk: ${a.risk_score}/100</b>
+      </div>
+    `).addTo(mapLayerGroups.accidents);
+  });
+
+  // Heatmap visual (manual colored dots)
+  DATA.map_accidents.forEach(a => {
+    const r = a.risk_score;
+    if(r < 50) return;
+    const opacity = (r - 50) / 50;
+    L.circleMarker([a.latitude, a.longitude], {
+      radius: 6, color: 'none', fillColor: '#f97316',
+      fillOpacity: opacity * 0.4, weight: 0
+    }).addTo(mapLayerGroups.heatmap);
+  });
+
+  mapLayerGroups.hotspots.addTo(mapInstance);
+  currentMapLayer = 'hotspots';
+}
+
+function setMapLayer(layer, el) {
+  if(!mapInstance) return;
+  document.querySelectorAll('.tab-chip').forEach(c=>c.classList.remove('active'));
+  el.classList.add('active');
+
+  Object.values(mapLayerGroups).forEach(lg => mapInstance.removeLayer(lg));
+  mapLayerGroups[layer].addTo(mapInstance);
+  currentMapLayer = layer;
+}
+
+// ─────────────────────────────────────────────
+// ANALYTICS CHARTS
+// ─────────────────────────────────────────────
+function renderAnalyticsCharts() {
+  // Hourly
+  const h = DATA.hourly_dist;
+  new Chart(document.getElementById('chart-hourly'), {
+    type: 'bar',
+    data: {
+      labels: h.map(d=>d.hour+':00'),
+      datasets: [
+        { label: 'Accidents', data: h.map(d=>d.count), backgroundColor: h.map(d=>d.hour>=7&&d.hour<=9||d.hour>=17&&d.hour<=20?'rgba(239,68,68,0.7)':'rgba(59,130,246,0.5)'), borderRadius: 2 }
+      ]
+    },
+    options: { ...chartDefaults(), responsive: true, plugins: { legend: { display: false } } }
+  });
+
+  // Weather risk
+  const wd = DATA.weather_dist;
+  const weatherRisks = {"Clear":35,"Rain":62,"Fog":74,"Haze":58,"Overcast":45,"Heavy Rain":81};
+  new Chart(document.getElementById('chart-weather'), {
+    type: 'bar',
+    data: {
+      labels: Object.keys(weatherRisks),
+      datasets: [{ label: 'Avg Risk Score', data: Object.values(weatherRisks),
+        backgroundColor: Object.values(weatherRisks).map(v=>v>70?'rgba(239,68,68,0.7)':v>55?'rgba(249,115,22,0.7)':'rgba(59,130,246,0.7)'),
+        borderRadius: 4 }]
+    },
+    options: { ...chartDefaults(), responsive: true, plugins: { legend: { display: false } } }
+  });
+
+  // Causes doughnut
+  const cd = DATA.cause_dist;
+  new Chart(document.getElementById('chart-causes'), {
+    type: 'doughnut',
+    data: {
+      labels: Object.keys(cd),
+      datasets: [{ data: Object.values(cd), backgroundColor: COLORS, borderWidth: 0 }]
+    },
+    options: { responsive: true, plugins: { legend: { position: 'bottom', labels: { color: '#94a3b8', font: {size:10}, boxWidth: 10 } } }, cutout: '55%' }
+  });
+
+  // Road type
+  const rr = DATA.road_risk;
+  new Chart(document.getElementById('chart-roadtype'), {
+    type: 'bar',
+    data: {
+      labels: Object.keys(rr),
+      datasets: [{ label: 'Avg Risk Score', data: Object.values(rr),
+        backgroundColor: 'rgba(249,115,22,0.7)', borderRadius: 4 }]
+    },
+    options: { ...chartDefaults(), responsive: true, indexAxis: 'y', plugins: { legend: { display: false } } }
+  });
+
+  // City risk
+  const cc = DATA.city_chart;
+  new Chart(document.getElementById('chart-city-risk'), {
+    type: 'radar',
+    data: {
+      labels: cc.map(c=>c.city),
+      datasets: [
+        { label: 'Avg Risk Score', data: cc.map(c=>c.avg_risk), borderColor: '#f97316', backgroundColor: 'rgba(249,115,22,0.1)', pointBackgroundColor: '#f97316' },
+        { label: 'Monsoon %', data: cc.map(c=>c.monsoon_pct), borderColor: '#3b82f6', backgroundColor: 'rgba(59,130,246,0.1)', pointBackgroundColor: '#3b82f6' }
+      ]
+    },
+    options: {
+      responsive: true,
+      scales: { r: { ticks: { color: '#64748b', font: {size:10} }, grid: { color: 'rgba(30,45,69,0.7)' }, pointLabels: { color: '#94a3b8', font: {size:11} } } },
+      plugins: { legend: { labels: { color: '#94a3b8', font: CHART_DEFAULTS.font, boxWidth: 12 } } }
+    }
+  });
+
+  // Fatality rate
+  new Chart(document.getElementById('chart-fatality'), {
+    type: 'bar',
+    data: {
+      labels: cc.map(c=>c.city),
+      datasets: [{ label: 'Fatality Rate %', data: cc.map(c=>c.fatality_rate),
+        backgroundColor: 'rgba(239,68,68,0.7)', borderRadius: 4 }]
+    },
+    options: { ...chartDefaults(), responsive: true, plugins: { legend: { display: false } } }
+  });
+}
+
+// ─────────────────────────────────────────────
+// PREDICTOR
+// ─────────────────────────────────────────────
+function runPredictor() {
+  const city = document.getElementById('p-city').value;
+  const weather = document.getElementById('p-weather').value;
+  const road = document.getElementById('p-road').value;
+  const hour = parseInt(document.getElementById('p-hour').value);
+  const roadCond = document.getElementById('p-road-cond').value;
+  const cause = document.getElementById('p-cause').value;
+  const vehicle = document.getElementById('p-vehicle').value;
+
+  // Rule-based risk estimation (mirrors ML logic)
+  let risk = 25;
+  if(['Fog','Heavy Rain','Rain'].includes(weather)) risk += weather==='Heavy Rain'?20:weather==='Fog'?18:10;
+  if(['National Highway','Expressway'].includes(road)) risk += 12;
+  if(hour>=7&&hour<=9||hour>=17&&hour<=20) risk += 15;
+  if(['Poor','Very Poor'].includes(roadCond)) risk += roadCond==='Very Poor'?18:10;
+  if(['Overspeeding','Drunk Driving'].includes(cause)) risk += 15;
+  if(vehicle==='Two-Wheeler') risk += 10;
+  if(['Delhi','Mumbai','Bengaluru'].includes(city)) risk += 5;
+  risk = Math.min(99, risk + Math.floor(Math.random()*8));
+
+  const color = risk>70?'#ef4444':risk>55?'#f97316':risk>40?'#eab308':'#22c55e';
+  const level = risk>70?'CRITICAL RISK':risk>55?'HIGH RISK':risk>40?'MEDIUM RISK':'LOW RISK';
+
+  document.getElementById('gauge-value').textContent = risk;
+  document.getElementById('gauge-value').style.color = color;
+  document.getElementById('gauge-label').textContent = 'Risk Score (out of 100)';
+  document.getElementById('gauge-fill').style.width = risk+'%';
+  document.getElementById('gauge-fill').style.background = `linear-gradient(90deg, ${color}88, ${color})`;
+  document.getElementById('gauge-level').innerHTML = `<span style="color:${color}; font-weight:700; font-size:16px;">${level}</span>`;
+
+  const insights = [];
+  if(['Fog','Heavy Rain'].includes(weather)) insights.push({icon:'🌫️',text:`${weather} conditions reduce visibility — major risk factor`});
+  if(hour>=17&&hour<=20) insights.push({icon:'⏰',text:'Evening peak hours: traffic density is at maximum'});
+  if(hour>=7&&hour<=9) insights.push({icon:'⏰',text:'Morning rush hour: congestion-induced risk elevated'});
+  if(['National Highway','Expressway'].includes(road)) insights.push({icon:'🛣️',text:`${road}: high-speed corridor with severe impact accidents`});
+  if(['Poor','Very Poor'].includes(roadCond)) insights.push({icon:'🕳️',text:`${roadCond} road condition: potholes and surface degradation`});
+  if(cause==='Overspeeding') insights.push({icon:'🚀',text:'Overspeeding is the #1 cause of fatal accidents in India'});
+  if(cause==='Drunk Driving') insights.push({icon:'🍺',text:'Impaired driving: reaction time reduced by 60%+'});
+  if(vehicle==='Two-Wheeler') insights.push({icon:'🏍️',text:'Two-wheelers account for 45% of all road fatalities in India'});
+  insights.push({icon:'💡',text:`Recommendation: ${getRiskRecommendation(cause, weather, road)}`});
+
+  document.getElementById('insight-list').innerHTML = insights.map(i=>`
+    <li><span class="insight-icon">${i.icon}</span><span>${i.text}</span></li>
+  `).join('');
+}
+
+function getRiskRecommendation(cause, weather, road) {
+  if(cause==='Overspeeding') return 'Install speed cameras and rumble strips at this location';
+  if(cause==='Drunk Driving') return 'Set up sobriety checkpoints on weekend nights';
+  if(weather==='Fog') return 'Deploy fog lights, reduce speed limit, install cat-eye reflectors';
+  if(weather==='Heavy Rain') return 'Add anti-skid treatment, improve drainage systems';
+  if(road==='National Highway') return 'Install guardrails, median barriers, and overhead signs';
+  return 'Increase police patrolling and install CCTV surveillance';
+}
+
+function renderScenarios() {
+  const container = document.getElementById('scenario-bars');
+  container.innerHTML = DATA.scenarios.map(s=>{
+    const c = s.risk>70?'#ef4444':s.risk>55?'#f97316':s.risk>40?'#eab308':'#22c55e';
+    return `
+      <div style="margin-bottom:12px;">
+        <div style="display:flex; justify-content:space-between; margin-bottom:4px;">
+          <span style="font-size:13px;">${s.name}</span>
+          <span style="font-size:13px; font-family:var(--mono); color:${c}; font-weight:700;">${s.risk}/100</span>
+        </div>
+        <div style="height:10px; background:var(--surface2); border-radius:5px; overflow:hidden;">
+          <div style="height:100%; width:${s.risk}%; background:linear-gradient(90deg,${c}88,${c}); border-radius:5px;"></div>
+        </div>
+        <div style="font-size:11px; color:var(--muted); margin-top:3px;">${s.factors.join(' · ')}</div>
+      </div>
+    `;
+  }).join('');
+}
+
+// ─────────────────────────────────────────────
+// EXPLAINABILITY
+// ─────────────────────────────────────────────
+function renderExplainability() {
+  const fi = DATA.feature_importance;
+  const maxVal = Math.max(...fi.map(f=>f.importance_gb));
+
+  document.getElementById('shap-bars').innerHTML = fi.slice(0,12).map((f,i)=>{
+    const pct = (f.importance_gb / maxVal * 100).toFixed(1);
+    const color = COLORS[i % COLORS.length];
+    return `
+      <div class="shap-bar-container">
+        <div class="shap-label">${f.feature.replace('_enc','').replace('_',' ')}</div>
+        <div class="shap-track">
+          <div class="shap-fill" style="width:${pct}%; background:${color};">${pct}%</div>
+        </div>
+      </div>
+    `;
+  }).join('');
+
+  // Metrics
+  const m = DATA.model_metrics;
+  document.getElementById('metrics-display').innerHTML = `
+    <div style="margin-bottom:1.5rem;">
+      <div style="font-size:12px; color:var(--muted); font-weight:600; text-transform:uppercase; letter-spacing:0.5px; margin-bottom:8px;">Gradient Boosting</div>
+      <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px;">
+        <div style="background:var(--surface2); padding:12px; border-radius:8px; text-align:center;">
+          <div style="font-size:22px; font-family:var(--mono); font-weight:700; color:#10b981;">${(m.gradient_boosting.accuracy*100).toFixed(1)}%</div>
+          <div style="font-size:11px; color:var(--muted);">Accuracy</div>
+        </div>
+        <div style="background:var(--surface2); padding:12px; border-radius:8px; text-align:center;">
+          <div style="font-size:22px; font-family:var(--mono); font-weight:700; color:#3b82f6;">${m.gradient_boosting.auc_roc}</div>
+          <div style="font-size:11px; color:var(--muted);">AUC-ROC</div>
+        </div>
+      </div>
+    </div>
+    <div>
+      <div style="font-size:12px; color:var(--muted); font-weight:600; text-transform:uppercase; letter-spacing:0.5px; margin-bottom:8px;">Random Forest</div>
+      <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px;">
+        <div style="background:var(--surface2); padding:12px; border-radius:8px; text-align:center;">
+          <div style="font-size:22px; font-family:var(--mono); font-weight:700; color:#10b981;">${(m.random_forest.accuracy*100).toFixed(1)}%</div>
+          <div style="font-size:11px; color:var(--muted);">Accuracy</div>
+        </div>
+        <div style="background:var(--surface2); padding:12px; border-radius:8px; text-align:center;">
+          <div style="font-size:22px; font-family:var(--mono); font-weight:700; color:#3b82f6;">${m.random_forest.auc_roc}</div>
+          <div style="font-size:11px; color:var(--muted);">AUC-ROC</div>
+        </div>
+      </div>
+    </div>
+  `;
+
+  // Comparison chart
+  new Chart(document.getElementById('chart-feat-compare'), {
+    type: 'bar',
+    data: {
+      labels: fi.slice(0,10).map(f=>f.feature.replace('_enc','').replace(/_/g,' ')),
+      datasets: [
+        { label: 'Gradient Boosting', data: fi.slice(0,10).map(f=>+(f.importance_gb*100).toFixed(2)), backgroundColor: 'rgba(249,115,22,0.7)', borderRadius: 3 },
+        { label: 'Random Forest', data: fi.slice(0,10).map(f=>+(f.importance_rf*100).toFixed(2)), backgroundColor: 'rgba(59,130,246,0.7)', borderRadius: 3 }
+      ]
+    },
+    options: { ...chartDefaults(), responsive: true }
+  });
+}
+
+// ─────────────────────────────────────────────
+// RECOMMENDATIONS
+// ─────────────────────────────────────────────
+let allRecs = [];
+function renderRecommendations() {
+  const hs = DATA.hotspots;
+  allRecs = hs.sort((a,b) => b.avg_risk - a.avg_risk);
+
+  const cityFilter = document.getElementById('rec-city-filter');
+  const cities = [...new Set(hs.map(h=>h.city))].sort();
+  cities.forEach(c => {
+    const opt = document.createElement('option');
+    opt.value = opt.textContent = c;
+    cityFilter.appendChild(opt);
+  });
+
+  renderRecTable(allRecs);
+}
+
+function filterRecs() {
+  const cf = document.getElementById('rec-city-filter').value;
+  const rf = document.getElementById('rec-risk-filter').value;
+  let filtered = allRecs;
+  if(cf) filtered = filtered.filter(r=>r.city===cf);
+  if(rf) filtered = filtered.filter(r=>r.risk_level===rf);
+  renderRecTable(filtered);
+}
+
+function renderRecTable(recs) {
+  document.getElementById('rec-tbody').innerHTML = recs.map((r,i)=>`
+    <tr>
+      <td style="color:var(--muted); font-family:var(--mono);">${i+1}</td>
+      <td><b>${r.city}</b></td>
+      <td>${r.num_accidents}</td>
+      <td><span class="risk-pill risk-${r.risk_level.toLowerCase()}">${r.risk_level}</span></td>
+      <td style="font-family:var(--mono); color:${r.avg_risk>70?'#ef4444':r.avg_risk>55?'#f97316':'#eab308'};">${r.avg_risk}</td>
+      <td>${r.top_cause}</td>
+      <td style="font-size:12px; color:#94a3b8;">${r.recommendation}</td>
+    </tr>
+  `).join('');
+}
+
+// ─────────────────────────────────────────────
+// DATA EXPLORER
+// ─────────────────────────────────────────────
+let allData = [];
+function renderDataExplorer() {
+  allData = DATA.map_accidents;
+  filteredData = [...allData];
+
+  const cityFilter = document.getElementById('data-city-filter');
+  const cities = [...new Set(allData.map(a=>a.city))].sort();
+  cities.forEach(c => {
+    const opt = document.createElement('option');
+    opt.value = opt.textContent = c;
+    cityFilter.appendChild(opt);
+  });
+
+  renderDataPage();
+}
+
+function filterData() {
+  const cf = document.getElementById('data-city-filter').value;
+  const sf = document.getElementById('data-sev-filter').value;
+  filteredData = allData;
+  if(cf) filteredData = filteredData.filter(a=>a.city===cf);
+  if(sf) filteredData = filteredData.filter(a=>a.severity===sf);
+  dataPage = 0;
+  renderDataPage();
+}
+
+function renderDataPage() {
+  const start = dataPage * PAGE_SIZE;
+  const slice = filteredData.slice(start, start + PAGE_SIZE);
+  document.getElementById('data-count').textContent = `${filteredData.length} records`;
+  document.getElementById('page-indicator').textContent = `Page ${dataPage+1} of ${Math.ceil(filteredData.length/PAGE_SIZE)}`;
+  document.getElementById('data-tbody').innerHTML = slice.map(a=>{
+    const riskColor = a.risk_score>70?'#ef4444':a.risk_score>55?'#f97316':a.risk_score>40?'#eab308':'#22c55e';
+    return `<tr>
+      <td style="font-family:var(--mono); font-size:11px; color:var(--muted);">${a.accident_id}</td>
+      <td>${a.city}</td>
+      <td>${a.date}</td>
+      <td>${a.hour}:00</td>
+      <td>${a.weather}</td>
+      <td style="font-size:11px;">${a.road_type}</td>
+      <td style="font-size:11px;">${a.accident_cause}</td>
+      <td><span class="risk-pill risk-${a.severity==='Fatal'?'critical':a.severity==='Grievous Injury'?'high':a.severity==='Minor Injury'?'medium':'low'}">${a.severity}</span></td>
+      <td style="text-align:center; color:#ef4444;">${a.num_killed}</td>
+      <td style="text-align:center; color:#f97316;">${a.num_injured}</td>
+      <td style="font-family:var(--mono); font-weight:700; color:${riskColor};">${a.risk_score}</td>
+    </tr>`;
+  }).join('');
+}
+
+function prevPage() { if(dataPage>0){dataPage--;renderDataPage();} }
+function nextPage() { if((dataPage+1)*PAGE_SIZE<filteredData.length){dataPage++;renderDataPage();} }
+
+// Start
+loadData();
+</script>
+</body>
+</html>

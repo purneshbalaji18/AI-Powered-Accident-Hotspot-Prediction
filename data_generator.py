@@ -4,6 +4,7 @@ Team SENTINELS - STATATHON 2025
 Data Generator: Synthetic Indian Road Accident Dataset
 """
 
+import os
 import numpy as np
 import pandas as pd
 import random
@@ -12,6 +13,10 @@ from datetime import datetime, timedelta
 # Seed for reproducibility
 np.random.seed(42)
 random.seed(42)
+
+BASE = os.path.dirname(os.path.abspath(__file__))
+DATA_DIR = os.path.join(BASE, "data")
+os.makedirs(DATA_DIR, exist_ok=True)
 
 # Indian cities with approximate bounding boxes
 CITIES = {
@@ -184,7 +189,8 @@ def generate_synthetic_dataset(n_records=5000):
 if __name__ == "__main__":
     print("Generating synthetic accident dataset...")
     df = generate_synthetic_dataset(5000)
-    df.to_csv("/home/claude/accident_hotspot/data/accidents.csv", index=False)
+    output_path = os.path.join(DATA_DIR, "accidents.csv")
+    df.to_csv(output_path, index=False)
     print(f"Dataset generated: {len(df)} records")
     print(df.head())
     print(df.describe())

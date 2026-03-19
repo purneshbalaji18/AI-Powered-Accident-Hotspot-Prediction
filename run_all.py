@@ -5,6 +5,7 @@ Team SENTINELS | STATATHON 2025
 import os
 import sys
 import time
+import subprocess
 
 BASE = os.path.dirname(os.path.abspath(__file__))
 
@@ -23,9 +24,12 @@ for label, script in steps:
     print(f"\n>>> {label}")
     print("-"*50)
     t0 = time.time()
-    ret = os.system(f"{sys.executable} {os.path.join(BASE, script)}")
+    # Wrap paths in quotes to handle spaces in folder names
+    cmd = [sys.executable, os.path.join(BASE, script)]
+    print(f"Running: {cmd}")
+    proc = subprocess.run(cmd, cwd=BASE)
     elapsed = time.time() - t0
-    if ret != 0:
+    if proc.returncode != 0:
         print(f"\n[ERROR] {script} failed. Check above for details.")
         sys.exit(1)
     print(f"  ✓ Completed in {elapsed:.1f}s")

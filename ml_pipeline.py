@@ -18,8 +18,9 @@ from sklearn.metrics import (
     confusion_matrix, roc_auc_score
 )
 
-OUTPUT_DIR = "/home/claude/accident_hotspot/models"
-DATA_PATH = "/home/claude/accident_hotspot/data/accidents.csv"
+BASE = os.path.dirname(os.path.abspath(__file__))
+OUTPUT_DIR = os.path.join(BASE, "models")
+DATA_PATH = os.path.join(BASE, "data", "accidents.csv")
 os.makedirs(OUTPUT_DIR, exist_ok=True)
 
 

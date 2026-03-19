@@ -7,8 +7,9 @@ import pandas as pd
 import numpy as np
 import os
 
-MODELS_DIR = "/home/claude/accident_hotspot/models"
-STATIC_DIR = "/home/claude/accident_hotspot/static"
+BASE = os.path.dirname(os.path.abspath(__file__))
+MODELS_DIR = os.path.join(BASE, "models")
+STATIC_DIR = os.path.join(BASE, "static")
 os.makedirs(STATIC_DIR, exist_ok=True)
 
 
